@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Python: lint + unit + integration + coverage ──────────────────────────
+  test:
+    name: Python Tests (3.10 / 3.11)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    defaults:
+      run:
+        working-directory: mnacp
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest tests/unit tests/evaluation -v --tb=short
+
+      - name: Integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest tests/integration -v --tb=short
+
+      - name: Coverage report
+        if: matrix.python-version == '3.11'
+        continue-on-error: true
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest tests/unit tests/evaluation \
+            --cov=agents --cov=registry --cov=protocol --cov=no_code --cov=evaluation \
+            --cov-report=xml --cov-report=term-missing -q
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.11'
+        continue-on-error: true
+        uses: codecov/codecov-action@v4
+        with:
+          files: mnacp/coverage.xml
+          flags: backend
+          fail_ci_if_error: false
+
+  # ── Docker build smoke test ────────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: test
+    if: always() && !cancelled()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build registry image
+        run: docker build -f mnacp/docker/registry.Dockerfile mnacp/ -t mnacp-registry:ci
+
+      - name: Build agent image
+        run: docker build -f mnacp/docker/agent.Dockerfile mnacp/ -t mnacp-agent:ci
+
+      - name: Smoke test registry container
+        run: |
+          docker run -d --name registry-smoke -p 8000:8000 \
+            -e LOG_LEVEL=INFO \
+            mnacp-registry:ci
+          echo "Waiting for registry to start (up to 40s)..."
+          for i in $(seq 1 20); do
+            sleep 2
+            if curl -sf http://localhost:8000/health; then
+              echo "Registry healthy after $((i*2))s"
+              docker stop registry-smoke
+              exit 0
+            fi
+            echo "Attempt $i: not ready yet"
+          done
+          echo "=== Container logs ==="
+          docker logs registry-smoke
+          echo "=== Health check failed ==="
+          docker stop registry-smoke || true
+          exit 1
+
+  # ── Frontend: type-check + build ──────────────────────────────────────────
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: mnacp/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mnacp/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_REGISTRY_URL: http://localhost:8000
+          NEXT_PUBLIC_ORCHESTRATOR_URL: http://localhost:8002
+          NEXT_PUBLIC_ROLE_BUILDER_URL: http://localhost:8001

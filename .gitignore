@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.env.local
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.lcov
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+
+# Secrets — never commit
+.env
+secrets/

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mnacp"
+version = "0.1.0"
+description = "MCP-Native Multi-Agent Coordination Protocol"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--tb=short"
+
+[tool.coverage.run]
+source = ["agents", "registry", "protocol", "no_code", "evaluation", "mcp_servers"]
+omit = ["tests/*", "docker/*", "*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 70
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

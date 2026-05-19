@@ -1,0 +1,167 @@
+version: "3.9"
+
+services:
+  # ── Registry ────────────────────────────────────────────────────────────────
+  registry:
+    build:
+      context: ..
+      dockerfile: docker/registry.Dockerfile
+    ports:
+      - "${REGISTRY_PORT:-8000}:8000"
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REGISTRY_API_KEY=${REGISTRY_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Agents ──────────────────────────────────────────────────────────────────
+  data-agent:
+    build:
+      context: ..
+      dockerfile: docker/agent.Dockerfile
+    ports:
+      - "${DATA_AGENT_PORT:-9001}:9000"
+    environment:
+      - AGENT_TYPE=data
+      - AGENT_PORT=9000
+      - REGISTRY_URL=http://registry:8000
+      - REGISTRY_API_KEY=${REGISTRY_API_KEY:-}
+    depends_on:
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:9000/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  search-agent:
+    build:
+      context: ..
+      dockerfile: docker/agent.Dockerfile
+    ports:
+      - "${SEARCH_AGENT_PORT:-9002}:9000"
+    environment:
+      - AGENT_TYPE=search
+      - AGENT_PORT=9000
+      - REGISTRY_URL=http://registry:8000
+    depends_on:
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:9000/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  analysis-agent:
+    build:
+      context: ..
+      dockerfile: docker/agent.Dockerfile
+    ports:
+      - "${ANALYSIS_AGENT_PORT:-9003}:9000"
+    environment:
+      - AGENT_TYPE=analysis
+      - AGENT_PORT=9000
+      - REGISTRY_URL=http://registry:8000
+    depends_on:
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:9000/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  code-agent:
+    build:
+      context: ..
+      dockerfile: docker/agent.Dockerfile
+    ports:
+      - "${CODE_AGENT_PORT:-9004}:9000"
+    environment:
+      - AGENT_TYPE=code
+      - AGENT_PORT=9000
+      - REGISTRY_URL=http://registry:8000
+    depends_on:
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:9000/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Orchestrator ─────────────────────────────────────────────────────────────
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: docker/registry.Dockerfile
+    command: ["python", "mnacp/orchestrator_server.py"]
+    ports:
+      - "${ORCHESTRATOR_PORT:-8002}:8002"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NEXT_PUBLIC_REGISTRY_URL=http://registry:8000
+      - ORCHESTRATOR_PORT=8002
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── Role Builder ─────────────────────────────────────────────────────────────
+  role-builder:
+    build:
+      context: ..
+      dockerfile: docker/registry.Dockerfile
+    command: ["python", "mnacp/role_builder_server.py"]
+    ports:
+      - "${ROLE_BUILDER_PORT:-8001}:8001"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NEXT_PUBLIC_REGISTRY_URL=http://registry:8000
+      - ROLE_BUILDER_PORT=8001
+      - ROLE_BUILDER_ADVERTISE_HOST=role-builder
+      - REGISTRY_API_KEY=${REGISTRY_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8001/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      # Browser calls go to localhost (user's machine), not container hostnames
+      - NEXT_PUBLIC_REGISTRY_URL=http://localhost:${REGISTRY_PORT:-8000}
+      - NEXT_PUBLIC_ORCHESTRATOR_URL=http://localhost:${ORCHESTRATOR_PORT:-8002}
+      - NEXT_PUBLIC_ROLE_BUILDER_URL=http://localhost:${ROLE_BUILDER_PORT:-8001}
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+      role-builder:
+        condition: service_healthy

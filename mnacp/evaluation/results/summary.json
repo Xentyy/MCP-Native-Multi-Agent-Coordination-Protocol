@@ -1,0 +1,35 @@
+{
+  "baseline_central": {
+    "task_completion_rate": 1.0,
+    "delegation_accuracy": 0.7222,
+    "avg_delegation_depth": 0,
+    "avg_delegation_count": 3.6,
+    "p50_latency_ms": 0.0,
+    "p90_latency_ms": 0.0,
+    "p99_latency_ms": 0.0,
+    "deadlock_rate": 0.0,
+    "total_runs": 15
+  },
+  "baseline_static": {
+    "task_completion_rate": 0.6,
+    "delegation_accuracy": 0.3,
+    "avg_delegation_depth": 0,
+    "avg_delegation_count": 1,
+    "p50_latency_ms": 0.0,
+    "p90_latency_ms": 0.0,
+    "p99_latency_ms": 0.0,
+    "deadlock_rate": 0.0,
+    "total_runs": 15
+  },
+  "mnacp": {
+    "task_completion_rate": 1.0,
+    "delegation_accuracy": 0.9667,
+    "avg_delegation_depth": 1,
+    "avg_delegation_count": 4.27,
+    "p50_latency_ms": 18641.0,
+    "p90_latency_ms": 22313.0,
+    "p99_latency_ms": 29406.0,
+    "deadlock_rate": 0.0,
+    "total_runs": 15
+  }
+}

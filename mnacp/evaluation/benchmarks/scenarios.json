@@ -1,0 +1,42 @@
+[
+  {
+    "id": "S1",
+    "description": "Bir CSV dosyasını yükle, temizle, istatistik hesapla, web'den güncel fiyatlarla karşılaştır ve markdown rapor oluştur",
+    "required_agents": ["DataAgent", "SearchAgent", "AnalysisAgent"],
+    "expected_delegations": 3,
+    "expected_depth": 1,
+    "difficulty": "hard"
+  },
+  {
+    "id": "S2",
+    "description": "Birden fazla web kaynağından veri topla, özetle ve istatistiksel özet çıkar",
+    "required_agents": ["SearchAgent", "DataAgent"],
+    "expected_delegations": 2,
+    "expected_depth": 1,
+    "difficulty": "medium"
+  },
+  {
+    "id": "S3",
+    "description": "Verilen sayı listesindeki trend analizi yap ve değişim yüzdesini hesapla",
+    "required_agents": ["AnalysisAgent"],
+    "expected_delegations": 1,
+    "expected_depth": 1,
+    "difficulty": "easy"
+  },
+  {
+    "id": "S4",
+    "description": "Hisse senedi verilerini CSV'den yükle, fiyat trendini analiz et, web'den güncel haberleri ara ve kapsamlı bir yatırım raporu üret",
+    "required_agents": ["DataAgent", "AnalysisAgent", "SearchAgent"],
+    "expected_delegations": 3,
+    "expected_depth": 1,
+    "difficulty": "hard"
+  },
+  {
+    "id": "S5",
+    "description": "İki veri setini karşılaştır ve sonuçları raporla",
+    "required_agents": ["AnalysisAgent"],
+    "expected_delegations": 1,
+    "expected_depth": 1,
+    "difficulty": "easy"
+  }
+]
