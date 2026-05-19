@@ -1,6 +1,6 @@
 # MNACP — MCP-Native Multi-Agent Coordination Protocol
 
-[![CI](https://github.com/Xentyy/bitirme-mnacp/actions/workflows/ci.yml/badge.svg)](https://github.com/Xentyy/bitirme-mnacp/actions/workflows/ci.yml)
+[![CI](https://github.com/Xentyy/MCP-Native-Multi-Agent-Coordination-Protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/Xentyy/MCP-Native-Multi-Agent-Coordination-Protocol/actions/workflows/ci.yml)
 
 Bilgisayar mühendisliği bitirme projesi. Birden fazla yapay zeka ajanının birbirinin araçlarını çalışma zamanında keşfedip kullanabildiği, bir ajanın çözemediği görevi başka bir ajana delege ettiği bir koordinasyon protokolü ve referans uygulaması.
 
@@ -312,7 +312,8 @@ Tarif yaz → Claude API + registry doğrulaması → önerilen araçlar + gerek
 İzleme odaklı sayfa, görev çalıştırma yok (chat sayfasına yönlendirir). 3 saniyede bir polling ile şunları gösterir:
 
 - **4 KPI kartı:** Toplam / Başarılı / Reddedilen / Başarı %
-- **Ajan Bazlı Performans** (recharts BarChart) — her hedef ajan için yığılmış başarı/hata barı + tablo (toplam çağrı, başarı %, ortalama gecikme). Veri: `GET /stats/by_agent`
+- **Ajan Bazlı Performans** (recharts BarChart) — her hedef ajan için yığılmış başarı/hata barı + tablo (toplam çağrı, başarı %, ortalama gecikme, **trend ikonu ↑ ↓ —**). Veri: `GET /stats/by_agent`
+- **Delegasyon Yoğunluğu** (AreaChart) — dakika başına toplam ve başarılı delegasyon sayısı. Veri: `GET /stats/timeseries`
 - **Gecikme Trendi** (LineChart) — son 30 delegasyonun gecikmesi, zamansal sıra
 - **Baseline Karşılaştırması** — `mnacp/evaluation/results/`'dan üretilmiş 3 PNG (görev tamamlama bar, senaryo×sistem heatmap, P50/P90/P99 dağılımı) gömülü görüntü olarak
 - **Delegasyon Geçmişi** — son N delegasyon kartı (kim → kime, görev özeti, gecikme, durum)
@@ -335,11 +336,11 @@ Tarif yaz → Claude API + registry doğrulaması → önerilen araçlar + gerek
 ```
 trust = success_rate × latency_factor × failure_penalty
 
-latency_factor  = 1 / (1 + latency_ms / 1000)
-failure_penalty = 0.5 ^ ardışık_hata_sayısı
+latency_factor  = 1 / (1 + latency_ms / 2000)
+failure_penalty = 0.9 ^ ardışık_hata_sayısı
 ```
 
-İlk kayıtta `trust = 1.0`. 3 ardışık hatada `0.5³ = 0.125`.
+İlk kayıtta `trust = 1.0`. 5 ardışık hatada `0.9⁵ ≈ 0.59`. Skor `[0.05, 1.0]` aralığında tutulur.
 
 ### 3. Deadlock Tespiti — Üç Katman
 
@@ -421,8 +422,8 @@ Orchestrator
 ### Docker ile (önerilen)
 
 ```bash
-git clone https://github.com/Xentyy/bitirme-mnacp.git
-cd bitirme-mnacp
+git clone https://github.com/Xentyy/MCP-Native-Multi-Agent-Coordination-Protocol.git
+cd MCP-Native-Multi-Agent-Coordination-Protocol
 
 # .env dosyası oluştur
 echo "ANTHROPIC_API_KEY=sk-ant-..." > mnacp/docker/.env
@@ -542,6 +543,7 @@ Integration testleri mock kullanmaz — gerçek uvicorn sunucuları daemon threa
 | GET | `/agents` | Tüm ajanlar |
 | POST | `/discover` | Semantik keşif |
 | POST | `/trust/record` | Güven olayı kaydet |
+| GET | `/agents/trends` | Her ajan için güven skoru trendi |
 | GET | `/health` | `{"status","agent_count"}` |
 
 ### Agent (9001–9004)
@@ -561,7 +563,8 @@ Integration testleri mock kullanmaz — gerçek uvicorn sunucuları daemon threa
 | POST | `/run/stream` | SSE stream |
 | GET | `/history` | Delegasyon geçmişi |
 | GET | `/stats` | Toplam istatistikler |
-| GET | `/stats/by_agent` | Hedef ajan bazlı kırılım (toplam, başarılı, hata, ortalama gecikme) |
+| GET | `/stats/by_agent` | Hedef ajan bazlı kırılım (toplam, başarılı, hata, gecikme, trend) |
+| GET | `/stats/timeseries` | Dakikalık delegasyon yoğunluğu (AreaChart için) |
 
 **SSE event tipleri:**
 ```
@@ -606,7 +609,7 @@ subtask_failed   peer_delegation  aggregate_start  final_answer  error
 ## Bilinen Sınırlar
 
 - Registry in-memory — heartbeat ile ajan kayıtları korunuyor ama delegasyon geçmişi restart'ta sıfırlanır.
-- Authentication / authorization yok (demo amaçlı).
+- `REGISTRY_API_KEY` boş bırakılırsa ajan kayıt doğrulaması devre dışıdır.
 - Distributed deployment değil — tek host varsayımı.
 
 ---
@@ -647,7 +650,7 @@ PYTHONPATH=$PWD python -m mnacp.evaluation.run_evaluation --skip-mnacp
 ## Dizin Yapısı
 
 ```
-bitirme-mnacp/
+MCP-Native-Multi-Agent-Coordination-Protocol/
 ├── README.md
 ├── .github/workflows/ci.yml
 │
