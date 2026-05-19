@@ -40,19 +40,19 @@ jobs:
 
       - name: Unit tests
         env:
-          PYTHONPATH: ${{ github.workspace }}/mnacp
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest tests/unit tests/evaluation -v --tb=short
 
       - name: Integration tests
         env:
-          PYTHONPATH: ${{ github.workspace }}/mnacp
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest tests/integration -v --tb=short
 
       - name: Coverage report
         if: matrix.python-version == '3.11'
         continue-on-error: true
         env:
-          PYTHONPATH: ${{ github.workspace }}/mnacp
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest tests/unit tests/evaluation \
             --cov=agents --cov=registry --cov=protocol --cov=no_code --cov=evaluation \
