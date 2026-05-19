@@ -24,6 +24,7 @@ from pydantic import BaseModel
 load_dotenv()
 
 from mnacp.agents.base_agent.registry_client import RegistryClient  # noqa: E402
+from mnacp.no_code.agents_store import load_agents, remove_agent, save_agent  # noqa: E402
 from mnacp.no_code.generic_agent import GenericAgent  # noqa: E402
 from mnacp.no_code.role_builder import RoleBuilder, RoleProposal, ToolSuggestion  # noqa: E402
 from mnacp.no_code.validator import validate_proposal  # noqa: E402
@@ -52,6 +53,37 @@ builder = RoleBuilder(registry_url=registry_url)
 
 # Aktif generic ajanlar: agent_id (str) → GenericAgent
 _generic_agents: dict[str, GenericAgent] = {}
+
+
+@app.on_event("startup")
+async def _restore_agents() -> None:
+    """Sunucu başlarken kalıcı depodan generic ajanları geri yükle."""
+    records = load_agents()
+    for rec in records:
+        try:
+            from mnacp.no_code.role_builder import ToolSuggestion as _TS
+            proposal = RoleProposal(
+                agent_name=rec["agent_name"],
+                agent_description=rec["agent_description"],
+                tags=rec.get("tags", []),
+                tools=[_TS(**t) for t in rec.get("tools", [])],
+                rationale=rec.get("rationale", ""),
+                user_description=rec.get("agent_description", ""),
+            )
+            from uuid import UUID as _UUID
+            agent = GenericAgent(
+                proposal=proposal,
+                registry_host=role_builder_host,
+                registry_port=role_builder_port,
+                agent_id=_UUID(rec["agent_id"]),
+            )
+            registration = agent.to_registration()
+            async with RegistryClient(registry_url) as client:
+                await client.register(registration)
+            _generic_agents[rec["agent_id"]] = agent
+            logger.info("Geri yüklendi: %s (id=%s)", agent.name, agent.agent_id)
+        except Exception as exc:
+            logger.warning("Ajan geri yükleme başarısız (%s): %s", rec.get("agent_id"), exc)
 
 
 # ─── DTO'lar ───────────────────────────────────────────────────────────────────
@@ -140,6 +172,14 @@ async def create(body: CreateRequest) -> AgentInfo:
 
     # Aktif ajanlar sözlüğüne ekle
     _generic_agents[str(agent.agent_id)] = agent
+    save_agent({
+        "agent_id": str(agent.agent_id),
+        "agent_name": agent.name,
+        "agent_description": agent.description,
+        "tags": list(proposal.tags),
+        "tools": [{"name": t.name, "description": t.description, "parameters": t.parameters} for t in proposal.tools],
+        "rationale": proposal.rationale,
+    })
     logger.info(
         "GenericAgent aktif: %s (id=%s) — /agents/%s/delegate",
         agent.name, agent.agent_id, agent.agent_id,
@@ -206,6 +246,21 @@ async def list_generic_agents():
         {"agent_id": aid, "name": a.name, "description": a.description}
         for aid, a in _generic_agents.items()
     ]
+
+
+@app.delete("/agents/{agent_id}", status_code=204)
+async def delete_generic_agent(agent_id: str):
+    """Generic ajanı sil: bellekten kaldır, registry'den sil, kalıcı depodan çıkar."""
+    if agent_id not in _generic_agents:
+        raise HTTPException(status_code=404, detail="Ajan bulunamadı")
+    _generic_agents.pop(agent_id)
+    try:
+        async with RegistryClient(registry_url) as client:
+            await client.unregister(UUID(agent_id))
+    except Exception as exc:
+        logger.warning("Registry'den silme başarısız (%s): %s", agent_id, exc)
+    remove_agent(agent_id)
+    logger.info("Generic ajan silindi: %s", agent_id)
 
 
 @app.get("/health")

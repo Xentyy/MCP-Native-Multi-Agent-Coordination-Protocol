@@ -26,52 +26,63 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
+  const kpis = [
+    { label: "Toplam Ajan", value: agents.length },
+    { label: "Çevrimiçi", value: agents.filter((a) => a.status === "online").length },
+    { label: "Toplam Araç", value: agents.reduce((s, a) => s + a.tools.length, 0) },
+  ];
+
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <main className="min-h-screen text-slate-100 p-8">
+      <div className="max-w-6xl mx-auto space-y-8 animate-slide-up">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white">MNACP Dashboard</h1>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
+              MNACP Dashboard
+            </h1>
             <p className="text-slate-400 mt-1">Multi-Agent Coordination Protocol — Canlı İzleme</p>
           </div>
           {health && (
-            <div className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-right">
-              <div className="text-green-400 font-semibold">{health.status.toUpperCase()}</div>
-              <div className="text-slate-400 text-sm">{health.agent_count} ajan aktif</div>
+            <div className="flex items-center gap-2 rounded-xl border border-slate-700/50 bg-slate-800/60 backdrop-blur-sm px-4 py-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+              </span>
+              <div className="text-right">
+                <div className="text-green-400 font-semibold text-sm">{health.status.toUpperCase()}</div>
+                <div className="text-slate-400 text-xs">{health.agent_count} ajan aktif</div>
+              </div>
             </div>
           )}
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-800 bg-red-950 p-4 text-red-300">
+          <div className="rounded-lg border border-red-800 bg-red-950/50 p-4 text-red-300">
             {error}
           </div>
         )}
 
+        {/* KPI kartları — gradient border trick */}
         <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: "Toplam Ajan", value: agents.length },
-            { label: "Çevrimiçi", value: agents.filter((a) => a.status === "online").length },
-            { label: "Toplam Araç", value: agents.reduce((s, a) => s + a.tools.length, 0) },
-          ].map(({ label, value }) => (
-            <div key={label} className="rounded-xl border border-slate-700 bg-slate-800 p-5 text-center">
-              <div className="text-4xl font-bold text-indigo-400">{value}</div>
-              <div className="text-slate-400 mt-1">{label}</div>
+          {kpis.map(({ label, value }) => (
+            <div
+              key={label}
+              className="rounded-xl p-px bg-gradient-to-br from-indigo-500/40 via-violet-500/20 to-transparent"
+            >
+              <div className="rounded-xl bg-slate-900 p-5 text-center h-full">
+                <div className="text-4xl font-bold text-indigo-400">{value}</div>
+                <div className="text-slate-400 mt-1 text-sm">{label}</div>
+              </div>
             </div>
           ))}
         </div>
 
+        {/* Ajan ağı */}
         <div>
-          <h2 className="text-xl font-semibold mb-3">Ajan Ağı</h2>
+          <h2 className="text-xl font-semibold mb-3 text-slate-200">Ajan Ağı</h2>
           <AgentGraph />
         </div>
-
-        <nav className="flex flex-wrap gap-4 text-indigo-400">
-          <a href="/chat" className="hover:underline">→ Orkestratör Sohbeti</a>
-          <a href="/agents" className="hover:underline">→ Ajan Yönetimi</a>
-          <a href="/roles" className="hover:underline">→ Rol Oluşturucu</a>
-          <a href="/monitor" className="hover:underline">→ Delegasyon Monitörü</a>
-        </nav>
       </div>
     </main>
   );

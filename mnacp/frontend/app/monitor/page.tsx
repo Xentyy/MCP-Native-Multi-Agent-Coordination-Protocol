@@ -65,10 +65,22 @@ interface AgentStats {
 
 function TrendIcon({ trend }: { trend: AgentStats["trend"] }) {
   if (trend === "improving")
-    return <span className="text-emerald-400 font-bold" title="İyileşiyor">↑</span>;
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-900/40 text-emerald-400 border border-emerald-700/30">
+        ↑ iyi
+      </span>
+    );
   if (trend === "degrading")
-    return <span className="text-rose-400 font-bold" title="Kötüleşiyor">↓</span>;
-  return <span className="text-slate-500" title="Stabil">—</span>;
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-rose-900/40 text-rose-400 border border-rose-700/30">
+        ↓ kötü
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-slate-800 text-slate-500 border border-slate-700/30">
+      — stabil
+    </span>
+  );
 }
 
 export default function MonitorPage() {
@@ -133,12 +145,11 @@ export default function MonitorPage() {
   );
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        <a href="/" className="text-indigo-400 hover:underline text-sm">
-          ← Ana sayfa
-        </a>
-        <h1 className="text-2xl font-bold">Delegasyon Monitörü</h1>
+    <main className="min-h-screen text-slate-100 p-8">
+      <div className="max-w-6xl mx-auto space-y-8 animate-slide-up">
+        <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
+          Delegasyon Monitörü
+        </h1>
 
         {/* KPI kutuları */}
         {stats && (
@@ -154,10 +165,12 @@ export default function MonitorPage() {
             ].map(({ label, value }) => (
               <div
                 key={label}
-                className="rounded-xl border border-slate-700 bg-slate-800 p-4 text-center"
+                className="rounded-xl p-px bg-gradient-to-br from-indigo-500/40 via-violet-500/20 to-transparent"
               >
-                <div className="text-2xl font-bold text-indigo-400">{value}</div>
-                <div className="text-slate-400 text-sm">{label}</div>
+                <div className="rounded-xl bg-slate-900 p-4 text-center h-full">
+                  <div className="text-2xl font-bold text-indigo-400">{value}</div>
+                  <div className="text-slate-400 text-sm">{label}</div>
+                </div>
               </div>
             ))}
           </div>

@@ -1,6 +1,8 @@
 const REGISTRY_URL = process.env.NEXT_PUBLIC_REGISTRY_URL || "http://localhost:8000";
 export const ORCHESTRATOR_URL =
   process.env.NEXT_PUBLIC_ORCHESTRATOR_URL || "http://localhost:8002";
+const ROLE_BUILDER_URL =
+  process.env.NEXT_PUBLIC_ROLE_BUILDER_URL || "http://localhost:8001";
 
 export interface Agent {
   agent_id: string;
@@ -8,6 +10,7 @@ export interface Agent {
   description: string;
   host: string;
   port: number;
+  base_path: string;
   tools: Tool[];
   status: "online" | "offline" | "busy";
   trust_score: number;
@@ -58,6 +61,13 @@ export async function discoverAgents(task: string): Promise<DiscoveryResult[]> {
   });
   if (!res.ok) throw new Error("Keşif başarısız");
   return res.json();
+}
+
+export async function deleteGenericAgent(agentId: string): Promise<void> {
+  const res = await fetch(`${ROLE_BUILDER_URL}/agents/${agentId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 204) throw new Error("Silme başarısız");
 }
 
 export async function fetchHealth(): Promise<{ status: string; agent_count: number }> {
