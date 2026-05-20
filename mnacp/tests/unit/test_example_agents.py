@@ -1,6 +1,8 @@
 """Örnek ajanların araç çağrısı ve delegasyon işleme testleri."""
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from mnacp.agents.example_agents.analysis_agent.agent import AnalysisAgent
 from mnacp.agents.example_agents.code_agent.agent import CodeAgent
@@ -209,3 +211,107 @@ async def test_code_agent_bubble_sort_template(code_agent):
     )
     assert result.get("success") is True
     assert "Sorted" in result.get("stdout", "")
+
+
+# ------------------------------------------------------------------
+# SearchAgent → AnalysisAgent peer delegation
+# ------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_search_agent_peer_delegation_triggered():
+    """Analiz anahtar kelimesi varsa _delegate_to_analysis_agent çağrılmalı."""
+    agent = SearchAgent()
+
+    # Sahte arama sonucu döndüren web_search mock'u
+    fake_results = [{"title": "Test", "snippet": "Test içerik", "url": "http://example.com"}]
+
+    with patch(
+        "mnacp.agents.example_agents.search_agent.agent.web_search",
+        new_callable=AsyncMock,
+        return_value=fake_results,
+    ), patch(
+        "mnacp.agents.example_agents.search_agent.agent.fetch_page",
+        new_callable=AsyncMock,
+        return_value={"content": "sayfa içeriği"},
+    ), patch.object(
+        agent, "_delegate_to_analysis_agent", new_callable=AsyncMock,
+        return_value={
+            "from_agent_name": "SearchAgent",
+            "to_agent_name": "AnalysisAgent",
+            "status": "completed",
+            "result": "# Rapor\nAnaliz tamamlandı.",
+            "error": None,
+        },
+    ) as mock_delegate:
+        result = await agent._process_delegated_task(
+            "yapay zeka haberlerini araştır ve analiz et",
+            {"original_task": "yapay zeka haberlerini araştır ve analiz et"},
+        )
+
+    mock_delegate.assert_called_once()
+    assert "search_results" in result
+    assert "_peer_delegations" in result
+    assert result["_peer_delegations"][0]["to_agent_name"] == "AnalysisAgent"
+
+
+@pytest.mark.asyncio
+async def test_search_agent_no_peer_delegation_without_analysis_keyword():
+    """Analiz anahtar kelimesi yoksa peer delegation tetiklenmemeli."""
+    agent = SearchAgent()
+
+    fake_results = [{"title": "Test", "snippet": "Test içerik", "url": "http://example.com"}]
+
+    with patch(
+        "mnacp.agents.example_agents.search_agent.agent.web_search",
+        new_callable=AsyncMock,
+        return_value=fake_results,
+    ), patch(
+        "mnacp.agents.example_agents.search_agent.agent.fetch_page",
+        new_callable=AsyncMock,
+        return_value={"content": ""},
+    ), patch.object(
+        agent, "_delegate_to_analysis_agent", new_callable=AsyncMock,
+    ) as mock_delegate:
+        result = await agent._process_delegated_task(
+            "Python MCP ara",
+            {"original_task": "Python MCP ara"},
+        )
+
+    mock_delegate.assert_not_called()
+    assert "_peer_delegations" not in result
+
+
+@pytest.mark.asyncio
+async def test_search_agent_peer_delegation_graceful_on_no_candidate():
+    """find_best_agent None döndürürse peer delegasyon sessizce atlanmalı."""
+    agent = SearchAgent()
+
+    with patch.object(
+        agent._discovery, "find_best_agent", new_callable=AsyncMock, return_value=None,
+    ):
+        result = await agent._delegate_to_analysis_agent(
+            task="analiz et",
+            search_data={"search_results": [], "summary": "özet", "query": "test"},
+            context={},
+        )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_analysis_agent_handles_search_results_context():
+    """AnalysisAgent, SearchAgent'tan gelen search_results context'ini raporlaştırmalı."""
+    agent = AnalysisAgent()
+    result = await agent._process_delegated_task(
+        "rapor oluştur",
+        {
+            "title": "Arama Analizi",
+            "search_results": [
+                {"title": "Haber 1", "snippet": "İçerik 1"},
+                {"title": "Haber 2", "snippet": "İçerik 2"},
+            ],
+            "summary": "İki önemli haber bulundu.",
+        },
+    )
+    assert isinstance(result, str)
+    assert "Arama Analizi" in result or "Arama Sonuçları" in result or "Özet" in result

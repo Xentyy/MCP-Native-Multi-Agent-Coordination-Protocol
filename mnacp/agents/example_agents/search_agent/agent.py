@@ -1,6 +1,7 @@
 """Web arama ve içerik özetleme ajanı — gerçek DuckDuckGo araması."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from mnacp.agents.base_agent.agent import BaseAgent
@@ -13,7 +14,11 @@ from mnacp.mcp_servers.search_tools.tools import (
     summarize,
     web_search,
 )
-from mnacp.protocol.schemas import ToolSchema
+from mnacp.protocol.delegation import DelegationManager
+from mnacp.protocol.discovery import DiscoveryProtocol
+from mnacp.protocol.schemas import DelegationStatus, ToolSchema
+
+logger = logging.getLogger(__name__)
 
 
 class SearchAgent(BaseAgent):
@@ -24,6 +29,8 @@ class SearchAgent(BaseAgent):
         registry_url: str = "http://localhost:8000",
         **kwargs: Any,
     ) -> None:
+        self._delegation_mgr = DelegationManager(max_depth=5)
+        self._discovery = DiscoveryProtocol(registry_url)
         super().__init__(
             name="SearchAgent",
             description=(
@@ -80,6 +87,14 @@ class SearchAgent(BaseAgent):
     async def _process_delegated_task(self, task: str, context: dict[str, Any]) -> Any:
         task_lower = task.lower()
         original_task = context.get("original_task", task)
+        combined = task_lower + " " + original_task.lower()
+
+        needs_analysis = any(k in combined for k in (
+            "analiz", "analysis", "rapor", "report", "trend",
+            "karşılaştır", "compare", "özet", "summary",
+        ))
+
+        search_result: dict[str, Any] | None = None
 
         # Arama görevi
         if any(k in task_lower for k in ("ara", "search", "bul", "araştır", "research", "bilgi", "haber")):
@@ -90,7 +105,6 @@ class SearchAgent(BaseAgent):
             if not results or (len(results) == 1 and results[0].get("title") == "Arama hatası"):
                 return {"search_results": [], "summary": "Arama başarısız", "query": query}
 
-            # İlk sonucun sayfasını getir (opsiyonel, daha zengin içerik)
             page_content = ""
             first_url = next((r["url"] for r in results if r.get("url", "").startswith("http")), "")
             if first_url:
@@ -100,23 +114,35 @@ class SearchAgent(BaseAgent):
                 except Exception:
                     pass
 
-            combined = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
+            combined_text = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
             if page_content:
-                combined = page_content + " " + combined
-            summary = summarize(SummarizeParams(text=combined, max_sentences=5)) if combined else ""
+                combined_text = page_content + " " + combined_text
+            summary = summarize(SummarizeParams(text=combined_text, max_sentences=5)) if combined_text else ""
 
-            return {
+            search_result = {
                 "query": query,
                 "search_results": results[:max_results],
                 "page_preview": page_content[:1000] if page_content else "",
                 "summary": summary,
             }
 
+            # Analiz/rapor da isteniyorsa AnalysisAgent'a peer delegasyon yap
+            if needs_analysis:
+                peer_result = await self._delegate_to_analysis_agent(
+                    task=task,
+                    search_data=search_result,
+                    context=context,
+                )
+                if peer_result:
+                    search_result["analysis"] = peer_result.get("result")
+                    search_result["_peer_delegations"] = [peer_result]
+
+            return search_result
+
         # Sayfa getirme
         if any(k in task_lower for k in ("fetch", "getir", "sayfa", "url", "link")):
             url = context.get("url", "")
             if not url:
-                # task'tan URL çek
                 import re
                 m = re.search(r"https?://\S+", task)
                 url = m.group(0) if m else ""
@@ -136,15 +162,90 @@ class SearchAgent(BaseAgent):
         # Varsayılan: araştır
         query = context.get("query") or _extract_query(task, original_task)
         results = await web_search(WebSearchParams(query=query, max_results=5))
-        combined = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
-        summary = summarize(SummarizeParams(text=combined, max_sentences=5)) if combined else ""
-        return {"query": query, "search_results": results, "summary": summary}
+        combined_text = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
+        summary = summarize(SummarizeParams(text=combined_text, max_sentences=5)) if combined_text else ""
+        search_result = {"query": query, "search_results": results, "summary": summary}
+
+        if needs_analysis:
+            peer_result = await self._delegate_to_analysis_agent(
+                task=task,
+                search_data=search_result,
+                context=context,
+            )
+            if peer_result:
+                search_result["analysis"] = peer_result.get("result")
+                search_result["_peer_delegations"] = [peer_result]
+
+        return search_result
+
+    async def _delegate_to_analysis_agent(
+        self,
+        task: str,
+        search_data: dict[str, Any],
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Arama sonuçlarını analiz/rapor için AnalysisAgent'a peer delegasyon yapar."""
+        try:
+            candidate = await self._discovery.find_best_agent(
+                task="arama sonuçlarını analiz et ve rapor oluştur",
+                required_capabilities=["generate_report", "trend_analysis"],
+                exclude_ids=[self.agent_id],
+            )
+            if candidate is None:
+                logger.warning("SearchAgent: AnalysisAgent registry'de bulunamadı, peer delegasyon atlandı")
+                return None
+
+            analysis_agent = candidate.agent
+            logger.info(
+                "SearchAgent → %s peer delegasyon: arama analizi (score=%.3f)",
+                analysis_agent.name,
+                candidate.similarity_score,
+            )
+
+            from uuid import UUID as _UUID
+            raw_chain = context.get("_delegation_chain", [])
+            chain: list[_UUID] = []
+            for item in raw_chain:
+                try:
+                    chain.append(_UUID(item) if isinstance(item, str) else item)
+                except (ValueError, AttributeError):
+                    pass
+
+            resp = await self._delegation_mgr.delegate(
+                from_agent_id=self.agent_id,
+                to_agent_id=analysis_agent.agent_id,
+                to_agent_host=analysis_agent.host,
+                to_agent_port=analysis_agent.port,
+                task="Arama sonuçlarını analiz et ve rapor oluştur",
+                context={
+                    "search_results": search_data.get("search_results", []),
+                    "summary": search_data.get("summary", ""),
+                    "query": search_data.get("query", ""),
+                    "original_task": context.get("original_task", task),
+                    "title": f"Arama Analizi: {search_data.get('query', task)[:60]}",
+                    "_delegation_chain": [str(i) for i in chain] + [str(self.agent_id)],
+                },
+                chain=chain,
+                to_agent_base_path=analysis_agent.base_path,
+            )
+
+            return {
+                "from_agent_id": str(self.agent_id),
+                "from_agent_name": self.name,
+                "to_agent_id": str(analysis_agent.agent_id),
+                "to_agent_name": analysis_agent.name,
+                "status": resp.status.value,
+                "result": resp.result if resp.status == DelegationStatus.COMPLETED else None,
+                "error": resp.error,
+            }
+        except Exception as exc:
+            logger.warning("SearchAgent peer delegasyon hatası: %s", exc)
+            return None
 
 
 def _extract_query(task: str, original_task: str) -> str:
     """Görev açıklamasından arama sorgusunu çıkar."""
     import re as _re
-    # Sondaki eylem eklerini temizle: "... araştırma yap", "... bilgi topla", "... web araştırması yap"
     clean = _re.sub(
         r"\s*(hakkında\s+)?(web\s+)?(araştırma|araştır|bilgi topla|araştır|kaynak topla|özetle)\s*(yap|et|çıkar)?\s*\.?$",
         "",
@@ -152,7 +253,6 @@ def _extract_query(task: str, original_task: str) -> str:
         flags=_re.IGNORECASE,
     ).strip()
 
-    # Yaygın arama eylem prefixlerini baştaki konumda sil
     for prefix in (
         "araştır ve özetle:", "araştır:", "hakkında bilgi topla:",
         "search for", "find information about", "look up",
@@ -163,7 +263,6 @@ def _extract_query(task: str, original_task: str) -> str:
 
     if len(clean) > 8:
         return clean[:200]
-    # Hiçbir şey kalmadıysa orijinal görevi kullan
     if len(task) < 200:
         return task.strip()
     return original_task[:200].strip()

@@ -123,6 +123,16 @@ class AnalysisAgent(BaseAgent):
             title = context.get("title", "Analiz Raporu")
             previous = context.get("previous_results", {}) or {}
             sections = []
+            # SearchAgent peer delegasyonundan gelen arama sonuçları
+            if "search_results" in context:
+                results = context["search_results"]
+                pretty = "\n".join(
+                    f"- {r.get('title', '')}: {r.get('snippet', '')}"
+                    for r in results[:5] if isinstance(r, dict)
+                )
+                sections.append({"heading": "Arama Sonuçları", "content": pretty or "(sonuç yok)"})
+            if "summary" in context and context["summary"]:
+                sections.append({"heading": "Özet", "content": str(context["summary"])})
             for tid, result in previous.items():
                 if isinstance(result, dict):
                     pretty = "\n".join(f"- **{k}**: {v}" for k, v in result.items())
