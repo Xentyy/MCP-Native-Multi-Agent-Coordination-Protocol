@@ -27,10 +27,10 @@ type SubtaskState = {
 type LogLine = { ts: number; text: string; tone: "info" | "ok" | "err" };
 
 const STATUS_BADGE: Record<SubtaskState["status"], string> = {
-  pending: "bg-slate-700 text-slate-200",
-  running: "bg-amber-600 text-amber-50 animate-pulse",
-  done: "bg-emerald-600 text-emerald-50",
-  failed: "bg-rose-700 text-rose-50",
+  pending: "bg-gray-100 text-gray-600 border border-gray-200",
+  running: "bg-amber-100 text-amber-700 border border-amber-200 animate-pulse",
+  done: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  failed: "bg-red-100 text-red-700 border border-red-200",
 };
 
 const PRESETS = [
@@ -48,7 +48,6 @@ export default function ChatPage() {
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [finalAnswer, setFinalAnswer] = useState("");
   const [error, setError] = useState("");
-  // edges: subtask_id → kenar; aynı subtask için sadece bir kenar tutar
   const [edges, setEdges] = useState<Record<string, LiveEdge>>({});
   const abortRef = useRef<AbortController | null>(null);
 
@@ -84,30 +83,18 @@ export default function ChatPage() {
           });
           setSubtasks(map);
           setOrder(ids);
-          log(
-            `Plan hazır: ${e.subtasks.length} alt görev (paralel=${e.can_parallelize})`,
-            "ok",
-          );
+          log(`Plan hazır: ${e.subtasks.length} alt görev (paralel=${e.can_parallelize})`, "ok");
           break;
         }
         case "subtask_start":
           setSubtasks((prev) => ({
             ...prev,
-            [e.subtask_id]: {
-              ...prev[e.subtask_id],
-              status: "running",
-              agent_id: e.agent_id ?? null,
-            },
+            [e.subtask_id]: { ...prev[e.subtask_id], status: "running", agent_id: e.agent_id ?? null },
           }));
           if (e.agent_id) {
             setEdges((prev) => ({
               ...prev,
-              [e.subtask_id]: {
-                from: "orchestrator",
-                to: e.agent_id!,
-                label: e.subtask_id,
-                status: "running",
-              },
+              [e.subtask_id]: { from: "orchestrator", to: e.agent_id!, label: e.subtask_id, status: "running" },
             }));
           }
           log(`▶ ${e.description.slice(0, 70)}${e.agent_name ? ` → ${e.agent_name}` : ""}`);
@@ -115,34 +102,20 @@ export default function ChatPage() {
         case "subtask_done":
           setSubtasks((prev) => ({
             ...prev,
-            [e.subtask_id]: {
-              ...prev[e.subtask_id],
-              status: "done",
-              agent_id: e.agent_id,
-              result_preview: e.result_preview,
-            },
+            [e.subtask_id]: { ...prev[e.subtask_id], status: "done", agent_id: e.agent_id, result_preview: e.result_preview },
           }));
           setEdges((prev) =>
-            prev[e.subtask_id]
-              ? { ...prev, [e.subtask_id]: { ...prev[e.subtask_id], status: "done" } }
-              : prev,
+            prev[e.subtask_id] ? { ...prev, [e.subtask_id]: { ...prev[e.subtask_id], status: "done" } } : prev,
           );
           log(`✓ tamamlandı: ${e.subtask_id.slice(0, 8)}`, "ok");
           break;
         case "subtask_failed":
           setSubtasks((prev) => ({
             ...prev,
-            [e.subtask_id]: {
-              ...prev[e.subtask_id],
-              status: "failed",
-              agent_id: e.agent_id ?? null,
-              error: e.error,
-            },
+            [e.subtask_id]: { ...prev[e.subtask_id], status: "failed", agent_id: e.agent_id ?? null, error: e.error },
           }));
           setEdges((prev) =>
-            prev[e.subtask_id]
-              ? { ...prev, [e.subtask_id]: { ...prev[e.subtask_id], status: "failed" } }
-              : prev,
+            prev[e.subtask_id] ? { ...prev, [e.subtask_id]: { ...prev[e.subtask_id], status: "failed" } } : prev,
           );
           log(`✗ başarısız: ${e.error}`, "err");
           break;
@@ -206,26 +179,29 @@ export default function ChatPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-6">
+    <main className="min-h-screen bg-gray-50 text-gray-900 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <header className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Orkestratör Sohbeti</h1>
-            <p className="text-slate-400 mt-1">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+              Orkestratör Sohbeti
+            </h1>
+            <p className="text-gray-500 mt-1">
               Görev gir → orkestratör ayrıştırsın, ajanlara delege etsin, sonucu canlı izle.
             </p>
           </div>
-          <a href="/" className="text-indigo-400 hover:underline">← Panel</a>
+          <a href="/" className="text-indigo-600 hover:underline text-sm">← Panel</a>
         </header>
 
-        <section className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-3">
+        {/* Görev girişi */}
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5 space-y-3">
           <div className="flex flex-wrap gap-2">
             {PRESETS.map((p) => (
               <button
                 key={p}
                 onClick={() => setTask(p)}
                 disabled={running}
-                className="text-xs rounded-full border border-slate-700 bg-slate-800 px-3 py-1 hover:border-indigo-500 disabled:opacity-50"
+                className="text-xs rounded-full border border-indigo-200 bg-indigo-50 text-indigo-600 px-3 py-1.5 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
               >
                 {p.slice(0, 40)}…
               </button>
@@ -236,14 +212,14 @@ export default function ChatPage() {
             onChange={(e) => setTask(e.target.value)}
             disabled={running}
             placeholder="Bir görev yaz: 'Şu konuyu araştır ve özet çıkar', 'Şu kod parçasını analiz et' …"
-            className="w-full h-24 rounded-lg bg-slate-800 border border-slate-700 p-3 text-sm font-mono focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+            className="w-full h-24 rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm font-mono focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 transition-all"
           />
           <div className="flex justify-between items-center">
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-gray-400">
               {planParallel !== null && (
                 <span>
                   Yürütme modu:{" "}
-                  <span className="text-indigo-400 font-semibold">
+                  <span className="text-indigo-600 font-semibold">
                     {planParallel ? "PARALEL" : "SIRALI"}
                   </span>
                 </span>
@@ -253,7 +229,7 @@ export default function ChatPage() {
               {running ? (
                 <button
                   onClick={onCancel}
-                  className="rounded-lg bg-rose-700 hover:bg-rose-600 px-4 py-2 text-sm font-semibold"
+                  className="rounded-xl bg-red-500 hover:bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors"
                 >
                   İptal
                 </button>
@@ -261,7 +237,7 @@ export default function ChatPage() {
                 <button
                   onClick={onRun}
                   disabled={!task.trim()}
-                  className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2 text-sm font-semibold"
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2 text-sm font-semibold text-white transition-colors"
                 >
                   Çalıştır
                 </button>
@@ -270,32 +246,37 @@ export default function ChatPage() {
           </div>
         </section>
 
+        {/* Canlı ajan ağı */}
         <section>
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold">Canlı Ajan Ağı</h2>
-            <div className="text-xs text-slate-500">
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1" />
-              çalışıyor &nbsp;
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1" />
-              tamamlandı &nbsp;
-              <span className="inline-block w-2 h-2 rounded-full bg-rose-500 mr-1" />
-              başarısız
+            <h2 className="text-lg font-semibold text-gray-800">Canlı Ajan Ağı</h2>
+            <div className="text-xs text-gray-400 flex items-center gap-3">
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-400" /> çalışıyor
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> tamamlandı
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-red-400" /> başarısız
+              </span>
             </div>
           </div>
           <AgentGraph delegationEdges={liveEdges} showOrchestrator />
         </section>
 
         {error && (
-          <div className="rounded-lg border border-red-800 bg-red-950 p-4 text-red-300 text-sm">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 text-sm">
             {error}
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Alt görevler */}
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Alt Görevler</h2>
+            <h2 className="text-lg font-semibold text-gray-800">Alt Görevler</h2>
             {order.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center text-slate-500 text-sm">
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-gray-400 text-sm">
                 Görev çalıştırınca alt görevler burada belirir.
               </div>
             ) : (
@@ -304,47 +285,37 @@ export default function ChatPage() {
                   const s = subtasks[id];
                   if (!s) return null;
                   return (
-                    <div
-                      key={id}
-                      className="rounded-lg border border-slate-700 bg-slate-900 p-3"
-                    >
+                    <div key={id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium">{s.description}</div>
+                          <div className="text-sm font-medium text-gray-800">{s.description}</div>
                           <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                             {s.required_capabilities.map((c) => (
-                              <span
-                                key={c}
-                                className="rounded bg-slate-800 border border-slate-700 px-1.5 py-0.5 text-slate-400"
-                              >
+                              <span key={c} className="rounded-full bg-indigo-50 border border-indigo-100 px-2 py-0.5 text-indigo-600">
                                 {c}
                               </span>
                             ))}
                             {s.depends_on.length > 0 && (
-                              <span className="rounded bg-slate-800 border border-slate-700 px-1.5 py-0.5 text-amber-400">
+                              <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-amber-600">
                                 ← {s.depends_on.length} bağımlılık
                               </span>
                             )}
                           </div>
                         </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_BADGE[s.status]}`}
-                        >
+                        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${STATUS_BADGE[s.status]}`}>
                           {s.status}
                         </span>
                       </div>
                       {s.result_preview && (
-                        <pre className="mt-2 rounded bg-slate-950 border border-slate-800 p-2 text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap">
+                        <pre className="mt-2 rounded-lg bg-gray-50 border border-gray-100 p-2 text-[11px] text-gray-600 overflow-x-auto whitespace-pre-wrap">
                           {s.result_preview}
                         </pre>
                       )}
                       {s.error && (
-                        <div className="mt-2 text-xs text-rose-400">⚠ {s.error}</div>
+                        <div className="mt-2 text-xs text-red-500">⚠ {s.error}</div>
                       )}
                       {s.agent_id && (
-                        <div className="mt-1 text-[10px] text-slate-500">
-                          ajan: {s.agent_id.slice(0, 8)}…
-                        </div>
+                        <div className="mt-1 text-[10px] text-gray-400">ajan: {s.agent_id.slice(0, 8)}…</div>
                       )}
                     </div>
                   );
@@ -353,39 +324,34 @@ export default function ChatPage() {
             )}
           </section>
 
+          {/* Canlı akış + nihai cevap */}
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Canlı Akış</h2>
-            <div className="rounded-xl border border-slate-700 bg-black/60 p-3 h-72 overflow-y-auto font-mono text-xs space-y-1">
+            <h2 className="text-lg font-semibold text-gray-800">Canlı Akış</h2>
+            <div className="rounded-xl border border-gray-200 bg-gray-900 p-3 h-72 overflow-y-auto font-mono text-xs space-y-1">
               {logs.length === 0 ? (
-                <div className="text-slate-600">— Henüz olay yok —</div>
+                <div className="text-gray-600">— Henüz olay yok —</div>
               ) : (
                 logs.map((l, i) => (
                   <div
                     key={i}
                     className={
-                      l.tone === "ok"
-                        ? "text-emerald-400"
-                        : l.tone === "err"
-                          ? "text-rose-400"
-                          : "text-slate-300"
+                      l.tone === "ok" ? "text-emerald-400" : l.tone === "err" ? "text-red-400" : "text-gray-300"
                     }
                   >
-                    <span className="text-slate-600">
-                      [{new Date(l.ts).toLocaleTimeString()}]
-                    </span>{" "}
+                    <span className="text-gray-600">[{new Date(l.ts).toLocaleTimeString()}]</span>{" "}
                     {l.text}
                   </div>
                 ))
               )}
             </div>
 
-            <h2 className="text-lg font-semibold pt-2">Nihai Cevap</h2>
+            <h2 className="text-lg font-semibold text-gray-800 pt-2">Nihai Cevap</h2>
             {finalAnswer ? (
-              <div className="rounded-xl border border-emerald-700 bg-emerald-950/30 p-4 whitespace-pre-wrap text-sm leading-relaxed">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
                 {finalAnswer}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-6 text-center text-slate-500 text-sm">
+              <div className="rounded-xl border border-dashed border-gray-200 bg-white p-6 text-center text-gray-400 text-sm">
                 Görev tamamlandığında cevap burada gösterilecek.
               </div>
             )}

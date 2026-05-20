@@ -15,10 +15,10 @@ export default function Navbar() {
   const pathname = usePathname();
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-md">
+    <nav className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/80 backdrop-blur-md shadow-sm">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link href="/" className="font-bold text-lg">
-          <span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
             MNACP
           </span>
         </Link>
@@ -31,8 +31,8 @@ export default function Navbar() {
                 href={href}
                 className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                   active
-                    ? "bg-indigo-600/20 text-indigo-300 font-medium"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                    ? "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200"
+                    : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
                 }`}
               >
                 {label}

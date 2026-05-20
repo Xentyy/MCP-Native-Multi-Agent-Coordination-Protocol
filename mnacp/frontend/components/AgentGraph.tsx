@@ -1,91 +1,197 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { memo, useCallback, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import ReactFlow, {
   Node,
   Edge,
+  EdgeProps,
   Background,
   Controls,
   MiniMap,
+  NodeProps,
   useNodesState,
   useEdgesState,
   MarkerType,
+  BaseEdge,
+  getStraightPath,
+  Handle,
+  Position,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { Agent, fetchAgents } from "@/lib/api";
 
+// ─── Status colours ────────────────────────────────────────────────────────
 const STATUS_COLOR: Record<string, string> = {
   online: "#22c55e",
   offline: "#ef4444",
   busy: "#f59e0b",
 };
 
+const STATUS_BG: Record<string, string> = {
+  online: "bg-emerald-100 text-emerald-700",
+  offline: "bg-red-100 text-red-700",
+  busy: "bg-amber-100 text-amber-700",
+};
+
+// ─── Custom agent node ──────────────────────────────────────────────────────
+const AgentNode = memo(({ data }: NodeProps) => {
+  const statusColor = STATUS_COLOR[data.status] ?? "#94a3b8";
+  const statusBg = STATUS_BG[data.status] ?? "bg-gray-100 text-gray-600";
+  const trust = Math.round((data.trust_score ?? 0) * 100);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.7 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.5 }}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+      className="rounded-xl bg-white border-2 shadow-md px-3 py-2.5 w-[148px]"
+      style={{ borderColor: statusColor, boxShadow: `0 0 0 3px ${statusColor}22` }}
+    >
+      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      <div className="flex items-center gap-1.5 mb-1">
+        <span
+          className="h-2 w-2 rounded-full flex-shrink-0"
+          style={{ backgroundColor: statusColor }}
+        />
+        <span className="font-semibold text-gray-800 text-xs truncate">{data.label}</span>
+      </div>
+      <div className="text-[10px] text-gray-400 mb-1.5">{data.toolCount} araç</div>
+      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusBg}`}>
+        {data.status}
+      </span>
+      <div className="mt-2">
+        <div className="flex justify-between text-[9px] text-gray-400 mb-0.5">
+          <span>güven</span>
+          <span>{trust}%</span>
+        </div>
+        <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+          <motion.div
+            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${trust}%` }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          />
+        </div>
+      </div>
+      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+    </motion.div>
+  );
+});
+AgentNode.displayName = "AgentNode";
+
+// ─── Custom orchestrator node ───────────────────────────────────────────────
+const OrchestratorNode = memo(() => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.6 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.4 }}
+    transition={{ type: "spring", stiffness: 200, damping: 18 }}
+    className="rounded-full flex flex-col items-center justify-center bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-lg"
+    style={{
+      width: 120,
+      height: 120,
+      boxShadow: "0 0 0 4px rgba(99,102,241,0.25), 0 0 24px rgba(99,102,241,0.4)",
+    }}
+  >
+    <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+    <div className="text-xs font-bold text-center leading-tight">Orkestratör</div>
+    <div className="text-[10px] text-indigo-200 mt-0.5">koordinatör</div>
+    <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+  </motion.div>
+));
+OrchestratorNode.displayName = "OrchestratorNode";
+
+// ─── Custom animated edge ───────────────────────────────────────────────────
+const AnimatedEdge = memo(
+  ({ sourceX, sourceY, targetX, targetY, data, style }: EdgeProps) => {
+    const [edgePath] = getStraightPath({ sourceX, sourceY, targetX, targetY });
+    const isRunning = data?.status === "running";
+
+    return (
+      <>
+        <BaseEdge
+          path={edgePath}
+          style={{
+            ...style,
+            strokeWidth: isRunning ? 3 : 2,
+            opacity: 0.9,
+            strokeDasharray: isRunning ? "8 4" : undefined,
+            animation: isRunning
+              ? "flowEdge 0.6s linear infinite, glowPulse 1.4s ease-in-out infinite"
+              : undefined,
+          }}
+        />
+        {data?.label && (
+          <text>
+            <textPath
+              href={`#${data.id}`}
+              startOffset="50%"
+              textAnchor="middle"
+              style={{ fontSize: 10, fill: style?.stroke as string ?? "#6366f1", fontWeight: 600 }}
+            >
+              {data.label}
+            </textPath>
+          </text>
+        )}
+      </>
+    );
+  },
+);
+AnimatedEdge.displayName = "AnimatedEdge";
+
+// ─── Node types registry ─────────────────────────────────────────────────────
+const NODE_TYPES = { agentNode: AgentNode, orchestratorNode: OrchestratorNode };
+const EDGE_TYPES = { animated: AnimatedEdge };
+
+// ─── Layout helpers ───────────────────────────────────────────────────────────
 const ORCHESTRATOR_ID = "orchestrator";
 
 function agentsToGraph(
   agents: Agent[],
   showOrchestrator: boolean,
 ): { nodes: Node[]; edges: Edge[] } {
-  const ringRadiusX = 280;
-  const ringRadiusY = 180;
-  const cx = 320;
-  const cy = 280;
+  const ringRadiusX = 290;
+  const ringRadiusY = 185;
+  const cx = 330;
+  const cy = 290;
+
   const nodes: Node[] = agents.map((agent, i) => ({
     id: agent.agent_id,
+    type: "agentNode",
     position: {
-      x: cx + Math.cos((i / agents.length) * 2 * Math.PI) * ringRadiusX,
-      y: cy + Math.sin((i / agents.length) * 2 * Math.PI) * ringRadiusY,
+      x: cx + Math.cos((i / agents.length) * 2 * Math.PI) * ringRadiusX - 74,
+      y: cy + Math.sin((i / agents.length) * 2 * Math.PI) * ringRadiusY - 50,
     },
     data: {
-      label: (
-        <div className="p-2 text-xs">
-          <div className="font-bold text-sm">{agent.name}</div>
-          <div className="text-gray-500">{agent.tools.length} araç</div>
-          <div
-            className="mt-1 rounded px-1 text-white text-center"
-            style={{ backgroundColor: STATUS_COLOR[agent.status] }}
-          >
-            {agent.status}
-          </div>
-          <div className="text-gray-400">güven: {(agent.trust_score * 100).toFixed(0)}%</div>
-        </div>
-      ),
-    },
-    style: {
-      border: `2px solid ${STATUS_COLOR[agent.status]}`,
-      borderRadius: 12,
-      backgroundColor: "#1e293b",
-      color: "#f1f5f9",
-      width: 140,
+      label: agent.name,
+      status: agent.status,
+      toolCount: agent.tools.length,
+      trust_score: agent.trust_score,
     },
   }));
 
   if (showOrchestrator) {
     nodes.push({
       id: ORCHESTRATOR_ID,
-      position: { x: cx, y: cy },
-      data: {
-        label: (
-          <div className="p-2 text-xs text-center">
-            <div className="font-bold text-sm">Orkestratör</div>
-            <div className="text-gray-400">koordinatör</div>
-          </div>
-        ),
-      },
-      style: {
-        border: `2px solid #6366f1`,
-        borderRadius: 999,
-        backgroundColor: "#312e81",
-        color: "#f1f5f9",
-        width: 130,
-        boxShadow: "0 0 24px rgba(99,102,241,0.5)",
-      },
+      type: "orchestratorNode",
+      position: { x: cx - 60, y: cy - 60 },
+      data: {},
     });
   }
 
   return { nodes, edges: [] };
 }
 
+// ─── Edge colour map ──────────────────────────────────────────────────────────
+const EDGE_COLOR: Record<string, string> = {
+  running: "#f59e0b",
+  done: "#22c55e",
+  failed: "#ef4444",
+};
+
+// ─── Main component ────────────────────────────────────────────────────────────
 interface Props {
   delegationEdges?: Array<{
     from: string;
@@ -95,12 +201,6 @@ interface Props {
   }>;
   showOrchestrator?: boolean;
 }
-
-const EDGE_COLOR: Record<string, string> = {
-  running: "#fbbf24",
-  done: "#22c55e",
-  failed: "#ef4444",
-};
 
 export default function AgentGraph({
   delegationEdges = [],
@@ -115,7 +215,7 @@ export default function AgentGraph({
       const { nodes: n } = agentsToGraph(data, showOrchestrator);
       setNodes(n);
     } catch {
-      // Registry henüz ayakta değil
+      // registry henüz ayakta değil
     }
   }, [setNodes, showOrchestrator]);
 
@@ -132,12 +232,10 @@ export default function AgentGraph({
         id: `e${i}-${e.from}-${e.to}`,
         source: e.from,
         target: e.to,
-        label: e.label,
-        animated: e.status === "running",
+        type: "animated",
         markerEnd: { type: MarkerType.ArrowClosed, color },
-        style: { stroke: color, strokeWidth: e.status === "running" ? 3 : 2 },
-        labelStyle: { fill: "#e2e8f0", fontSize: 11, fontWeight: 600 },
-        labelBgStyle: { fill: "#0f172a" },
+        style: { stroke: color },
+        data: { status: e.status ?? "running", label: e.label, id: `e${i}-${e.from}-${e.to}` },
       };
     });
     setEdges(dynamicEdges);
@@ -145,23 +243,35 @@ export default function AgentGraph({
   }, [JSON.stringify(delegationEdges)]);
 
   return (
-    <div className="h-[500px] w-full rounded-xl border border-slate-700 bg-slate-900">
+    <div className="h-[500px] w-full rounded-2xl border border-gray-200 bg-gray-50 shadow-sm overflow-hidden">
       {nodes.length === 0 ? (
-        <div className="flex h-full items-center justify-center text-slate-400">
+        <div className="flex h-full items-center justify-center text-gray-400 text-sm">
           Registry bağlantısı bekleniyor…
         </div>
       ) : (
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          fitView
-        >
-          <Background color="#334155" gap={16} />
-          <Controls />
-          <MiniMap nodeColor={(n) => (n.style?.borderColor as string) ?? "#6366f1"} />
-        </ReactFlow>
+        <AnimatePresence>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+          >
+            <Background color="#e2e8f0" gap={20} />
+            <Controls />
+            <MiniMap
+              nodeColor={(n) => {
+                if (n.id === ORCHESTRATOR_ID) return "#6366f1";
+                return STATUS_COLOR[n.data?.status] ?? "#94a3b8";
+              }}
+              maskColor="rgba(248,250,252,0.7)"
+              style={{ background: "#f1f5f9", border: "1px solid #e2e8f0" }}
+            />
+          </ReactFlow>
+        </AnimatePresence>
       )}
     </div>
   );

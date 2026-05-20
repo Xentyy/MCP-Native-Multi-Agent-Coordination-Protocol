@@ -3,15 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 body {
@@ -33,4 +26,23 @@ body {
 
 .animate-slide-up {
   animation: slideUp 0.35s ease forwards;
+}
+
+@keyframes flowEdge {
+  0%   { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.edge-flow {
+  stroke-dasharray: 8 4;
+  animation: flowEdge 0.6s linear infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(99,102,241,0.6)); }
+  50%       { filter: drop-shadow(0 0 10px rgba(99,102,241,1)); }
+}
+
+.edge-glow {
+  animation: glowPulse 1.4s ease-in-out infinite;
 }
