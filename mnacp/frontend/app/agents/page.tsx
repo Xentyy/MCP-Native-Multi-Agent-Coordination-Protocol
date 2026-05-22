@@ -40,7 +40,7 @@ export default function AgentsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900 p-8">
+    <main className="min-h-screen bg-slate-100 text-gray-900 p-8">
       <div className="max-w-6xl mx-auto space-y-6 animate-slide-up">
         <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
           Ajan Yönetimi
@@ -130,7 +130,7 @@ export default function AgentsPage() {
               </div>
               <div className="space-y-2">
                 {selected.tools.map((tool) => (
-                  <div key={tool.name} className="rounded-xl bg-gray-50 border border-gray-200 p-3">
+                  <div key={tool.name} className="rounded-xl bg-slate-100 border border-gray-200 p-3">
                     <div className="font-mono text-indigo-600 text-sm">{tool.name}</div>
                     <div className="text-gray-600 text-sm mt-0.5">{tool.description}</div>
                   </div>

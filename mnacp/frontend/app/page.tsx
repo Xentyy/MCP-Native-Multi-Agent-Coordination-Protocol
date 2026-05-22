@@ -33,7 +33,7 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900 p-8">
+    <main className="min-h-screen bg-slate-100 text-gray-900 p-8">
       <div className="max-w-6xl mx-auto space-y-8 animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between">

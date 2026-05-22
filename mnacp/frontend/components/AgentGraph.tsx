@@ -13,15 +13,14 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   MarkerType,
-  BaseEdge,
-  getStraightPath,
+  getBezierPath,
   Handle,
   Position,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { Agent, fetchAgents } from "@/lib/api";
 
-// ─── Status colours ────────────────────────────────────────────────────────
+// ─── Status colours ─────────────────────────────────────────────────────────────
 const STATUS_COLOR: Record<string, string> = {
   online: "#22c55e",
   offline: "#ef4444",
@@ -34,7 +33,7 @@ const STATUS_BG: Record<string, string> = {
   busy: "bg-amber-100 text-amber-700",
 };
 
-// ─── Custom agent node ──────────────────────────────────────────────────────
+// ─── Custom agent node ──────────────────────────────────────────────────────────
 const AgentNode = memo(({ data }: NodeProps) => {
   const statusColor = STATUS_COLOR[data.status] ?? "#94a3b8";
   const statusBg = STATUS_BG[data.status] ?? "bg-gray-100 text-gray-600";
@@ -49,12 +48,14 @@ const AgentNode = memo(({ data }: NodeProps) => {
       className="rounded-xl bg-white border-2 shadow-md px-3 py-2.5 w-[148px]"
       style={{ borderColor: statusColor, boxShadow: `0 0 0 3px ${statusColor}22` }}
     >
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      {/* Çoklu handle — kenarlar en uygun kenardan bağlanabilsin */}
+      <Handle id="top"    type="target" position={Position.Top}    style={{ opacity: 0 }} />
+      <Handle id="left"   type="target" position={Position.Left}   style={{ opacity: 0 }} />
+      <Handle id="right"  type="source" position={Position.Right}  style={{ opacity: 0 }} />
+      <Handle id="bottom" type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+
       <div className="flex items-center gap-1.5 mb-1">
-        <span
-          className="h-2 w-2 rounded-full flex-shrink-0"
-          style={{ backgroundColor: statusColor }}
-        />
+        <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: statusColor }} />
         <span className="font-semibold text-gray-800 text-xs truncate">{data.label}</span>
       </div>
       <div className="text-[10px] text-gray-400 mb-1.5">{data.toolCount} araç</div>
@@ -75,13 +76,12 @@ const AgentNode = memo(({ data }: NodeProps) => {
           />
         </div>
       </div>
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </motion.div>
   );
 });
 AgentNode.displayName = "AgentNode";
 
-// ─── Custom orchestrator node ───────────────────────────────────────────────
+// ─── Custom orchestrator node ──────────────────────────────────────────────────
 const OrchestratorNode = memo(() => (
   <motion.div
     initial={{ opacity: 0, scale: 0.6 }}
@@ -95,66 +95,123 @@ const OrchestratorNode = memo(() => (
       boxShadow: "0 0 0 4px rgba(99,102,241,0.25), 0 0 24px rgba(99,102,241,0.4)",
     }}
   >
-    <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+    <Handle id="top"    type="target" position={Position.Top}    style={{ opacity: 0 }} />
+    <Handle id="left"   type="target" position={Position.Left}   style={{ opacity: 0 }} />
+    <Handle id="right"  type="source" position={Position.Right}  style={{ opacity: 0 }} />
+    <Handle id="bottom" type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     <div className="text-xs font-bold text-center leading-tight">Orkestratör</div>
     <div className="text-[10px] text-indigo-200 mt-0.5">koordinatör</div>
-    <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
   </motion.div>
 ));
 OrchestratorNode.displayName = "OrchestratorNode";
 
-// ─── Custom animated edge ───────────────────────────────────────────────────
-const AnimatedEdge = memo(
-  ({ sourceX, sourceY, targetX, targetY, data, style }: EdgeProps) => {
-    const [edgePath] = getStraightPath({ sourceX, sourceY, targetX, targetY });
+// ─── Custom bezier edge — sıralı çizim animasyonu ──────────────────────────────
+interface EdgeData {
+  status?: "running" | "done" | "failed";
+  label?: string;
+  order?: number;
+}
+
+const SequencedEdge = memo(
+  ({
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    data,
+    style,
+    markerEnd,
+  }: EdgeProps<EdgeData>) => {
+    const [edgePath, labelX, labelY] = getBezierPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+      curvature: 0.35,
+    });
+
     const isRunning = data?.status === "running";
+    const order = data?.order ?? 0;
+    const delay = order * 0.45; // her edge bir öncekinden 0.45s sonra çizilir
+    const stroke = (style?.stroke as string) ?? "#6366f1";
 
     return (
       <>
-        <BaseEdge
-          path={edgePath}
-          style={{
-            ...style,
-            strokeWidth: isRunning ? 3 : 2,
-            opacity: 0.9,
-            strokeDasharray: isRunning ? "8 4" : undefined,
-            animation: isRunning
-              ? "flowEdge 0.6s linear infinite, glowPulse 1.4s ease-in-out infinite"
-              : undefined,
-          }}
+        {/* Arka plan path — orijinal path'i marker ile gösterir, animasyon overlay */}
+        <motion.path
+          id={id}
+          d={edgePath}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={isRunning ? 3 : 2.4}
+          strokeLinecap="round"
+          opacity={0.95}
+          markerEnd={markerEnd as string | undefined}
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: 0.95 }}
+          transition={{ pathLength: { duration: 0.9, delay, ease: "easeInOut" }, opacity: { duration: 0.2, delay } }}
+          style={
+            isRunning
+              ? {
+                  strokeDasharray: "8 5",
+                  animation: "flowEdge 0.6s linear infinite",
+                  filter: `drop-shadow(0 0 6px ${stroke}88)`,
+                }
+              : undefined
+          }
         />
         {data?.label && (
-          <text>
-            <textPath
-              href={`#${data.id}`}
-              startOffset="50%"
+          <motion.g
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: delay + 0.5, duration: 0.3 }}
+          >
+            <rect
+              x={labelX - 16}
+              y={labelY - 9}
+              width={32}
+              height={18}
+              rx={9}
+              fill="white"
+              stroke={stroke}
+              strokeWidth={1}
+              opacity={0.95}
+            />
+            <text
+              x={labelX}
+              y={labelY + 4}
               textAnchor="middle"
-              style={{ fontSize: 10, fill: style?.stroke as string ?? "#6366f1", fontWeight: 600 }}
+              style={{ fontSize: 10, fill: stroke, fontWeight: 600 }}
             >
               {data.label}
-            </textPath>
-          </text>
+            </text>
+          </motion.g>
         )}
       </>
     );
   },
 );
-AnimatedEdge.displayName = "AnimatedEdge";
+SequencedEdge.displayName = "SequencedEdge";
 
-// ─── Node types registry ─────────────────────────────────────────────────────
+// ─── Node / edge registries ─────────────────────────────────────────────────────
 const NODE_TYPES = { agentNode: AgentNode, orchestratorNode: OrchestratorNode };
-const EDGE_TYPES = { animated: AnimatedEdge };
+const EDGE_TYPES = { sequenced: SequencedEdge };
 
-// ─── Layout helpers ───────────────────────────────────────────────────────────
 const ORCHESTRATOR_ID = "orchestrator";
 
+// ─── Layout — halka düzeni ──────────────────────────────────────────────────────
 function agentsToGraph(
   agents: Agent[],
   showOrchestrator: boolean,
 ): { nodes: Node[]; edges: Edge[] } {
-  const ringRadiusX = 290;
-  const ringRadiusY = 185;
-  const cx = 330;
+  const ringRadiusX = 300;
+  const ringRadiusY = 195;
+  const cx = 340;
   const cy = 290;
 
   const nodes: Node[] = agents.map((agent, i) => ({
@@ -180,18 +237,16 @@ function agentsToGraph(
       data: {},
     });
   }
-
   return { nodes, edges: [] };
 }
 
-// ─── Edge colour map ──────────────────────────────────────────────────────────
+// ─── Edge colour map ────────────────────────────────────────────────────────────
 const EDGE_COLOR: Record<string, string> = {
   running: "#f59e0b",
   done: "#22c55e",
   failed: "#ef4444",
 };
 
-// ─── Main component ────────────────────────────────────────────────────────────
 interface Props {
   delegationEdges?: Array<{
     from: string;
@@ -226,16 +281,16 @@ export default function AgentGraph({
   }, [loadAgents]);
 
   useEffect(() => {
-    const dynamicEdges: Edge[] = delegationEdges.map((e, i) => {
+    const dynamicEdges: Edge<EdgeData>[] = delegationEdges.map((e, i) => {
       const color = EDGE_COLOR[e.status ?? "running"] ?? "#6366f1";
       return {
         id: `e${i}-${e.from}-${e.to}`,
         source: e.from,
         target: e.to,
-        type: "animated",
-        markerEnd: { type: MarkerType.ArrowClosed, color },
+        type: "sequenced",
+        markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
         style: { stroke: color },
-        data: { status: e.status ?? "running", label: e.label, id: `e${i}-${e.from}-${e.to}` },
+        data: { status: e.status ?? "running", label: e.label, order: i },
       };
     });
     setEdges(dynamicEdges);
@@ -243,7 +298,7 @@ export default function AgentGraph({
   }, [JSON.stringify(delegationEdges)]);
 
   return (
-    <div className="h-[500px] w-full rounded-2xl border border-gray-200 bg-gray-50 shadow-sm overflow-hidden">
+    <div className="h-[500px] w-full rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       {nodes.length === 0 ? (
         <div className="flex h-full items-center justify-center text-gray-400 text-sm">
           Registry bağlantısı bekleniyor…
@@ -259,6 +314,8 @@ export default function AgentGraph({
             edgeTypes={EDGE_TYPES}
             fitView
             fitViewOptions={{ padding: 0.2 }}
+            proOptions={{ hideAttribution: true }}
+            defaultEdgeOptions={{ type: "sequenced" }}
           >
             <Background color="#e2e8f0" gap={20} />
             <Controls />

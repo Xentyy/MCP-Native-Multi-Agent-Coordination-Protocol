@@ -179,7 +179,7 @@ export default function ChatPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900 p-6">
+    <main className="min-h-screen bg-slate-100 text-gray-900 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <header className="flex items-center justify-between">
           <div>
@@ -212,7 +212,7 @@ export default function ChatPage() {
             onChange={(e) => setTask(e.target.value)}
             disabled={running}
             placeholder="Bir görev yaz: 'Şu konuyu araştır ve özet çıkar', 'Şu kod parçasını analiz et' …"
-            className="w-full h-24 rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm font-mono focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 transition-all"
+            className="w-full h-24 rounded-xl bg-slate-100 border border-gray-200 p-3 text-sm font-mono focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 transition-all"
           />
           <div className="flex justify-between items-center">
             <div className="text-xs text-gray-400">
@@ -307,7 +307,7 @@ export default function ChatPage() {
                         </span>
                       </div>
                       {s.result_preview && (
-                        <pre className="mt-2 rounded-lg bg-gray-50 border border-gray-100 p-2 text-[11px] text-gray-600 overflow-x-auto whitespace-pre-wrap">
+                        <pre className="mt-2 rounded-lg bg-slate-100 border border-gray-100 p-2 text-[11px] text-gray-600 overflow-x-auto whitespace-pre-wrap">
                           {s.result_preview}
                         </pre>
                       )}

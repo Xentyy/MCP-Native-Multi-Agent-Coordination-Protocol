@@ -95,11 +95,23 @@ class AgentRegistry:
             query_vec = self._embedder.embed_query(request.task_description)
             exclude = [str(i) for i in request.exclude_agent_ids]
 
-            online_vecs = {
-                aid: vec
-                for aid, vec in self._embeddings.items()
-                if self._agents[aid].status == AgentStatus.ONLINE and aid not in exclude
-            }
+            def _has_capability(agent: AgentRegistration, cap: str) -> bool:
+                cap_lower = cap.lower()
+                return any(
+                    cap_lower in t.name.lower() or cap_lower in t.description.lower()
+                    for t in agent.tools
+                ) or any(cap_lower in tag.lower() for tag in (agent.tags or []))
+
+            online_vecs = {}
+            for aid, vec in self._embeddings.items():
+                agent = self._agents[aid]
+                if agent.status != AgentStatus.ONLINE or aid in exclude:
+                    continue
+                if request.required_capabilities and not all(
+                    _has_capability(agent, cap) for cap in request.required_capabilities
+                ):
+                    continue
+                online_vecs[aid] = vec
 
             if not online_vecs:
                 return []

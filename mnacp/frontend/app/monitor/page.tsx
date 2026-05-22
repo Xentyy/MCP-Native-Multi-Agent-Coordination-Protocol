@@ -201,7 +201,7 @@ export default function MonitorPage() {
     : [];
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900 p-8">
+    <main className="min-h-screen bg-slate-100 text-gray-900 p-8">
       <div className="max-w-6xl mx-auto space-y-8 animate-slide-up">
         <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
           Delegasyon Monitörü
@@ -289,7 +289,7 @@ export default function MonitorPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {agentStats.map((a) => (
-                      <tr key={a.agent_id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={a.agent_id} className="hover:bg-slate-100 transition-colors">
                         <td className="py-2.5 pr-4 font-medium flex items-center gap-2">
                           <span
                             className={`w-2 h-2 rounded-full shrink-0 ${
@@ -432,7 +432,7 @@ export default function MonitorPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div className="rounded-xl border border-gray-100 bg-slate-100 p-3">
               <div className="text-xs text-gray-400 mb-2">Görev Tamamlama Oranı</div>
               <Image
                 src="/evaluation/completion_rate.png"
@@ -443,7 +443,7 @@ export default function MonitorPage() {
                 unoptimized
               />
             </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div className="rounded-xl border border-gray-100 bg-slate-100 p-3">
               <div className="text-xs text-gray-400 mb-2">Senaryo × Sistem Heatmap</div>
               <Image
                 src="/evaluation/scenario_heatmap.png"
@@ -454,7 +454,7 @@ export default function MonitorPage() {
                 unoptimized
               />
             </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 md:col-span-2">
+            <div className="rounded-xl border border-gray-100 bg-slate-100 p-3 md:col-span-2">
               <div className="text-xs text-gray-400 mb-2">Gecikme Dağılımı (P50 / P90 / P99)</div>
               <Image
                 src="/evaluation/latency_distribution.png"
