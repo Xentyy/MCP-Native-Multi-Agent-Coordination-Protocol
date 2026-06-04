@@ -6,13 +6,11 @@ from uuid import uuid4
 
 import numpy as np
 import pytest
-
 from mnacp.no_code.generic_agent import GenericAgent
 from mnacp.no_code.role_builder import RoleProposal, ToolSuggestion
 from mnacp.protocol.schemas import DelegationRequest, DelegationStatus, TrustEvent
 from mnacp.registry.capability_embedder import CapabilityEmbedder
 from mnacp.registry.trust_scorer import TrustScorer
-
 
 # ─── TrustScorer ──────────────────────────────────────────────────────────────
 
@@ -185,7 +183,7 @@ def test_embedder_top_k_excludes(embedder):
 @pytest.mark.asyncio
 async def test_discovery_find_best_returns_first():
     from mnacp.protocol.discovery import DiscoveryProtocol
-    from mnacp.protocol.schemas import DiscoveryResult, AgentInfo, ToolSchema
+    from mnacp.protocol.schemas import AgentInfo, DiscoveryResult
 
     mock_result = MagicMock(spec=DiscoveryResult)
     mock_result.agent = MagicMock(spec=AgentInfo)
@@ -212,7 +210,6 @@ async def test_discovery_find_best_returns_none_when_empty():
 @pytest.mark.asyncio
 async def test_discovery_find_agents_builds_correct_request():
     from mnacp.protocol.discovery import DiscoveryProtocol
-    from mnacp.protocol.schemas import DiscoveryResult
 
     protocol = DiscoveryProtocol("http://fake:8000")
     captured = {}
@@ -239,7 +236,7 @@ async def test_discovery_find_agents_builds_correct_request():
 @pytest.mark.asyncio
 async def test_discovery_resolve_tool_owner_finds_matching_tool():
     from mnacp.protocol.discovery import DiscoveryProtocol
-    from mnacp.protocol.schemas import DiscoveryResult, AgentInfo, ToolSchema
+    from mnacp.protocol.schemas import AgentInfo, DiscoveryResult, ToolSchema
 
     tool = ToolSchema(name="web_search", description="arama yapar")
     agent = MagicMock(spec=AgentInfo)
