@@ -219,10 +219,9 @@ async def test_code_agent_bubble_sort_template(code_agent):
 
 @pytest.mark.asyncio
 async def test_search_agent_peer_delegation_triggered():
-    """Analiz anahtar kelimesi varsa _delegate_to_analysis_agent çağrılmalı."""
+    """Analiz anahtar kelimesi varsa _delegate_to_peer çağrılmalı."""
     agent = SearchAgent()
 
-    # Sahte arama sonucu döndüren web_search mock'u
     fake_results = [{"title": "Test", "snippet": "Test içerik", "url": "http://example.com"}]
 
     with patch(
@@ -234,7 +233,7 @@ async def test_search_agent_peer_delegation_triggered():
         new_callable=AsyncMock,
         return_value={"content": "sayfa içeriği"},
     ), patch.object(
-        agent, "_delegate_to_analysis_agent", new_callable=AsyncMock,
+        agent, "_delegate_to_peer", new_callable=AsyncMock,
         return_value={
             "from_agent_name": "SearchAgent",
             "to_agent_name": "AnalysisAgent",
@@ -270,7 +269,7 @@ async def test_search_agent_no_peer_delegation_without_analysis_keyword():
         new_callable=AsyncMock,
         return_value={"content": ""},
     ), patch.object(
-        agent, "_delegate_to_analysis_agent", new_callable=AsyncMock,
+        agent, "_delegate_to_peer", new_callable=AsyncMock,
     ) as mock_delegate:
         result = await agent._process_delegated_task(
             "Python MCP ara",
@@ -283,19 +282,29 @@ async def test_search_agent_no_peer_delegation_without_analysis_keyword():
 
 @pytest.mark.asyncio
 async def test_search_agent_peer_delegation_graceful_on_no_candidate():
-    """find_best_agent None döndürürse peer delegasyon sessizce atlanmalı."""
+    """_delegate_to_peer None döndürürse peer delegasyon sessizce atlanmalı."""
     agent = SearchAgent()
 
     with patch.object(
-        agent._discovery, "find_best_agent", new_callable=AsyncMock, return_value=None,
-    ):
-        result = await agent._delegate_to_analysis_agent(
-            task="analiz et",
-            search_data={"search_results": [], "summary": "özet", "query": "test"},
-            context={},
-        )
+        agent, "_delegate_to_peer", new_callable=AsyncMock, return_value=None,
+    ) as mock_delegate:
+        fake_results = [{"title": "T", "snippet": "s", "url": "http://example.com"}]
+        with patch(
+            "mnacp.agents.example_agents.search_agent.agent.web_search",
+            new_callable=AsyncMock,
+            return_value=fake_results,
+        ), patch(
+            "mnacp.agents.example_agents.search_agent.agent.fetch_page",
+            new_callable=AsyncMock,
+            return_value={"content": ""},
+        ):
+            result = await agent._process_delegated_task(
+                "araştır ve analiz et",
+                {"original_task": "araştır ve analiz et"},
+            )
 
-    assert result is None
+    mock_delegate.assert_called_once()
+    assert "_peer_delegations" not in result or result.get("_peer_delegations") == []
 
 
 @pytest.mark.asyncio

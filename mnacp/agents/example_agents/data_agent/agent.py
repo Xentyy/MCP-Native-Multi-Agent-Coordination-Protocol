@@ -6,9 +6,7 @@ from typing import Any
 
 from mnacp.agents.base_agent.agent import BaseAgent
 from mnacp.mcp_servers.data_tools.tools import TOOL_HANDLERS, LoadCsvParams, load_csv
-from mnacp.protocol.delegation import DelegationManager
-from mnacp.protocol.discovery import DiscoveryProtocol
-from mnacp.protocol.schemas import DelegationStatus, ToolSchema
+from mnacp.protocol.schemas import ToolSchema
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +24,6 @@ class DataAgent(BaseAgent):
         registry_url: str = "http://localhost:8000",
         **kwargs: Any,
     ) -> None:
-        self._delegation_mgr = DelegationManager(max_depth=5)
-        self._discovery = DiscoveryProtocol(registry_url)
         super().__init__(
             name="DataAgent",
             description=(
@@ -219,14 +215,17 @@ class DataAgent(BaseAgent):
                 return {"error": "İstatistik için sayısal sütun bulunamadı", "rows_count": len(rows)}
             stats_result = await self.execute_tool("compute_statistics", {"rows": rows, "column": column})
 
-            # Hem istatistik hem analiz/rapor isteniyorsa → AnalysisAgent'a delege et
             if needs_analysis:
-                peer_result = await self._delegate_to_analysis_agent(
-                    task=task,
-                    stats=stats_result,
-                    rows=rows,
-                    column=column,
+                peer_result = await self._delegate_to_peer(
+                    task="İstatistik verilerinden trend analizi ve rapor oluştur",
                     context=context,
+                    required_capabilities=["generate_report", "trend_analysis"],
+                    peer_context={
+                        "values": [float(r.get(column, 0)) for r in rows if self._can_be_float(r.get(column))],
+                        "statistics": stats_result,
+                        "column": column,
+                        "title": f"{column} Sütunu Analiz Raporu",
+                    },
                 )
                 return {
                     "statistics": stats_result,
@@ -251,12 +250,16 @@ class DataAgent(BaseAgent):
             if column:
                 stats_result = await self.execute_tool("compute_statistics", {"rows": rows, "column": column})
                 if needs_analysis:
-                    peer_result = await self._delegate_to_analysis_agent(
-                        task=task,
-                        stats=stats_result,
-                        rows=rows,
-                        column=column,
+                    peer_result = await self._delegate_to_peer(
+                        task="İstatistik verilerinden trend analizi ve rapor oluştur",
                         context=context,
+                        required_capabilities=["generate_report", "trend_analysis"],
+                        peer_context={
+                            "values": [float(r.get(column, 0)) for r in rows if self._can_be_float(r.get(column))],
+                            "statistics": stats_result,
+                            "column": column,
+                            "title": f"{column} Sütunu Analiz Raporu",
+                        },
                     )
                     return {
                         "statistics": stats_result,
@@ -267,80 +270,6 @@ class DataAgent(BaseAgent):
             return rows
         return {"message": "Çalıştırılacak görev veya veri bulunamadı"}
 
-    async def _delegate_to_analysis_agent(
-        self,
-        task: str,
-        stats: dict[str, Any],
-        rows: list[dict[str, Any]],
-        column: str,
-        context: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        """İstatistik sonuçlarını AnalysisAgent'a rapor için delege eder."""
-        try:
-            # Registry'den AnalysisAgent'ı bul
-            candidate = await self._discovery.find_best_agent(
-                task="trend analizi ve rapor oluştur",
-                required_capabilities=["generate_report", "trend_analysis"],
-                exclude_ids=[self.agent_id],
-            )
-            if candidate is None:
-                logger.warning("DataAgent: AnalysisAgent registry'de bulunamadı, peer delegasyon atlandı")
-                return None
-
-            analysis_agent = candidate.agent
-            logger.info(
-                "DataAgent → %s peer delegasyon: istatistik raporu (score=%.3f)",
-                analysis_agent.name,
-                candidate.similarity_score,
-            )
-
-            # Mevcut delegasyon zincirini genişlet (string → UUID)
-            from uuid import UUID as _UUID
-            raw_chain = context.get("_delegation_chain", [])
-            chain: list[_UUID] = []
-            for item in raw_chain:
-                try:
-                    chain.append(_UUID(item) if isinstance(item, str) else item)
-                except (ValueError, AttributeError):
-                    pass
-
-            values = []
-            for row in rows:
-                try:
-                    values.append(float(row.get(column, 0)))
-                except (TypeError, ValueError):
-                    pass
-
-            resp = await self._delegation_mgr.delegate(
-                from_agent_id=self.agent_id,
-                to_agent_id=analysis_agent.agent_id,
-                to_agent_host=analysis_agent.host,
-                to_agent_port=analysis_agent.port,
-                task="İstatistik verilerinden trend analizi ve rapor oluştur",
-                context={
-                    "values": values,
-                    "statistics": stats,
-                    "column": column,
-                    "original_task": context.get("original_task", task),
-                    "title": f"{column} Sütunu Analiz Raporu",
-                    "_delegation_chain": chain + [str(self.agent_id)],
-                },
-                chain=chain,
-                to_agent_base_path=analysis_agent.base_path,
-            )
-
-            return {
-                "from_agent_id": str(self.agent_id),
-                "from_agent_name": self.name,
-                "to_agent_id": str(analysis_agent.agent_id),
-                "to_agent_name": analysis_agent.name,
-                "status": resp.status.value,
-                "result": resp.result if resp.status == DelegationStatus.COMPLETED else None,
-                "error": resp.error,
-            }
-        except Exception as exc:
-            logger.warning("DataAgent peer delegasyon hatası: %s", exc)
-            return None
 
 
 if __name__ == "__main__":

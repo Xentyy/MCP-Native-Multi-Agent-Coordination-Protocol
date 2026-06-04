@@ -25,6 +25,8 @@ from mnacp.protocol.schemas import (
     TrustEvent,
 )
 
+_UNSET = object()
+
 logger = logging.getLogger(__name__)
 
 
@@ -234,6 +236,84 @@ class BaseAgent(ABC):
             raise ValueError("Bu ajanda hiç araç tanımlı değil")
         # İlk araç basit fallback — orkestratör zaten doğru ajanı seçmeli
         return await self.execute_tool(tools[0].name, context)
+
+    async def _delegate_to_peer(
+        self,
+        task: str,
+        context: dict[str, Any],
+        required_capabilities: list[str],
+        peer_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Herhangi bir peer ajana capability bazlı delegasyon yapar.
+
+        required_capabilities listesini karşılayan en iyi ajana HTTP üzerinden
+        görev devreder. Dönen dict Orchestrator'ın _peer_delegations alanına
+        eklenmek üzere hazırlanmıştır.
+        """
+        from mnacp.protocol.delegation import DelegationManager
+        from mnacp.protocol.discovery import DiscoveryProtocol
+
+        if not hasattr(self, "_peer_delegation_mgr"):
+            self._peer_delegation_mgr = DelegationManager(max_depth=self.max_delegation_depth)
+        if not hasattr(self, "_peer_discovery"):
+            self._peer_discovery = DiscoveryProtocol(self.registry_url)
+
+        try:
+            candidate = await self._peer_discovery.find_best_agent(
+                task=task,
+                required_capabilities=required_capabilities,
+                exclude_ids=[self.agent_id],
+            )
+            if candidate is None:
+                logger.warning(
+                    "%s: peer delegasyon için uygun ajan bulunamadı (caps=%s)",
+                    self.name, required_capabilities,
+                )
+                return None
+
+            peer = candidate.agent
+            logger.info(
+                "%s → %s peer delegasyon (caps=%s, score=%.3f)",
+                self.name, peer.name, required_capabilities, candidate.similarity_score,
+            )
+
+            raw_chain = context.get("_delegation_chain", [])
+            chain: list[UUID] = []
+            for item in raw_chain:
+                try:
+                    chain.append(UUID(item) if isinstance(item, str) else item)
+                except (ValueError, AttributeError):
+                    pass
+
+            delegation_context = {
+                "original_task": context.get("original_task", task),
+                "_delegation_chain": [str(i) for i in chain] + [str(self.agent_id)],
+                **(peer_context or {}),
+            }
+
+            resp = await self._peer_delegation_mgr.delegate(
+                from_agent_id=self.agent_id,
+                to_agent_id=peer.agent_id,
+                to_agent_host=peer.host,
+                to_agent_port=peer.port,
+                task=task,
+                context=delegation_context,
+                chain=chain,
+                to_agent_base_path=peer.base_path,
+            )
+
+            return {
+                "from_agent_id": str(self.agent_id),
+                "from_agent_name": self.name,
+                "to_agent_id": str(peer.agent_id),
+                "to_agent_name": peer.name,
+                "status": resp.status.value,
+                "result": resp.result if resp.status == DelegationStatus.COMPLETED else None,
+                "error": resp.error,
+            }
+        except Exception as exc:
+            logger.warning("%s peer delegasyon hatası: %s", self.name, exc)
+            return None
 
     # ------------------------------------------------------------------
     # FastAPI tabanlı MCP benzeri HTTP sunucu

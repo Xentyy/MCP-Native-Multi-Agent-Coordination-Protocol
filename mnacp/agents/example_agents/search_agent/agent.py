@@ -14,9 +14,7 @@ from mnacp.mcp_servers.search_tools.tools import (
     summarize,
     web_search,
 )
-from mnacp.protocol.delegation import DelegationManager
-from mnacp.protocol.discovery import DiscoveryProtocol
-from mnacp.protocol.schemas import DelegationStatus, ToolSchema
+from mnacp.protocol.schemas import ToolSchema
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +27,6 @@ class SearchAgent(BaseAgent):
         registry_url: str = "http://localhost:8000",
         **kwargs: Any,
     ) -> None:
-        self._delegation_mgr = DelegationManager(max_depth=5)
-        self._discovery = DiscoveryProtocol(registry_url)
         super().__init__(
             name="SearchAgent",
             description=(
@@ -126,12 +122,17 @@ class SearchAgent(BaseAgent):
                 "summary": summary,
             }
 
-            # Analiz/rapor da isteniyorsa AnalysisAgent'a peer delegasyon yap
             if needs_analysis:
-                peer_result = await self._delegate_to_analysis_agent(
-                    task=task,
-                    search_data=search_result,
+                peer_result = await self._delegate_to_peer(
+                    task="Arama sonuçlarını analiz et ve rapor oluştur",
                     context=context,
+                    required_capabilities=["generate_report", "trend_analysis"],
+                    peer_context={
+                        "search_results": search_result.get("search_results", []),
+                        "summary": search_result.get("summary", ""),
+                        "query": search_result.get("query", ""),
+                        "title": f"Arama Analizi: {search_result.get('query', task)[:60]}",
+                    },
                 )
                 if peer_result:
                     search_result["analysis"] = peer_result.get("result")
@@ -167,80 +168,22 @@ class SearchAgent(BaseAgent):
         search_result = {"query": query, "search_results": results, "summary": summary}
 
         if needs_analysis:
-            peer_result = await self._delegate_to_analysis_agent(
-                task=task,
-                search_data=search_result,
+            peer_result = await self._delegate_to_peer(
+                task="Arama sonuçlarını analiz et ve rapor oluştur",
                 context=context,
+                required_capabilities=["generate_report", "trend_analysis"],
+                peer_context={
+                    "search_results": search_result.get("search_results", []),
+                    "summary": search_result.get("summary", ""),
+                    "query": search_result.get("query", ""),
+                    "title": f"Arama Analizi: {search_result.get('query', task)[:60]}",
+                },
             )
             if peer_result:
                 search_result["analysis"] = peer_result.get("result")
                 search_result["_peer_delegations"] = [peer_result]
 
         return search_result
-
-    async def _delegate_to_analysis_agent(
-        self,
-        task: str,
-        search_data: dict[str, Any],
-        context: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        """Arama sonuçlarını analiz/rapor için AnalysisAgent'a peer delegasyon yapar."""
-        try:
-            candidate = await self._discovery.find_best_agent(
-                task="arama sonuçlarını analiz et ve rapor oluştur",
-                required_capabilities=["generate_report", "trend_analysis"],
-                exclude_ids=[self.agent_id],
-            )
-            if candidate is None:
-                logger.warning("SearchAgent: AnalysisAgent registry'de bulunamadı, peer delegasyon atlandı")
-                return None
-
-            analysis_agent = candidate.agent
-            logger.info(
-                "SearchAgent → %s peer delegasyon: arama analizi (score=%.3f)",
-                analysis_agent.name,
-                candidate.similarity_score,
-            )
-
-            from uuid import UUID as _UUID
-            raw_chain = context.get("_delegation_chain", [])
-            chain: list[_UUID] = []
-            for item in raw_chain:
-                try:
-                    chain.append(_UUID(item) if isinstance(item, str) else item)
-                except (ValueError, AttributeError):
-                    pass
-
-            resp = await self._delegation_mgr.delegate(
-                from_agent_id=self.agent_id,
-                to_agent_id=analysis_agent.agent_id,
-                to_agent_host=analysis_agent.host,
-                to_agent_port=analysis_agent.port,
-                task="Arama sonuçlarını analiz et ve rapor oluştur",
-                context={
-                    "search_results": search_data.get("search_results", []),
-                    "summary": search_data.get("summary", ""),
-                    "query": search_data.get("query", ""),
-                    "original_task": context.get("original_task", task),
-                    "title": f"Arama Analizi: {search_data.get('query', task)[:60]}",
-                    "_delegation_chain": [str(i) for i in chain] + [str(self.agent_id)],
-                },
-                chain=chain,
-                to_agent_base_path=analysis_agent.base_path,
-            )
-
-            return {
-                "from_agent_id": str(self.agent_id),
-                "from_agent_name": self.name,
-                "to_agent_id": str(analysis_agent.agent_id),
-                "to_agent_name": analysis_agent.name,
-                "status": resp.status.value,
-                "result": resp.result if resp.status == DelegationStatus.COMPLETED else None,
-                "error": resp.error,
-            }
-        except Exception as exc:
-            logger.warning("SearchAgent peer delegasyon hatası: %s", exc)
-            return None
 
 
 def _extract_query(task: str, original_task: str) -> str:
